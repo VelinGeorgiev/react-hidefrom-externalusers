@@ -1,39 +1,49 @@
 import { override } from '@microsoft/decorators';
-import { Log } from '@microsoft/sp-core-library';
 import {
-  BaseApplicationCustomizer
+  BaseApplicationCustomizer, PlaceholderContent, PlaceholderName
 } from '@microsoft/sp-application-base';
-import { Dialog } from '@microsoft/sp-dialog';
+import * as ReactDom from "react-dom";
 
-import * as strings from 'InternalUserMenuApplicationCustomizerStrings';
+import UserMenu from "./components/UserMenu";
+import { IUserMenuProps } from "./components/IUserMenuProps";
+import * as React from 'react';
+import { MSGraphClient, HttpClientResponse } from '@microsoft/sp-http';
 
-const LOG_SOURCE: string = 'InternalUserMenuApplicationCustomizer';
-
-/**
- * If your command set uses the ClientSideComponentProperties JSON input,
- * it will be deserialized into the BaseExtension.properties object.
- * You can define an interface to describe it.
- */
 export interface IInternalUserMenuApplicationCustomizerProperties {
-  // This is an example; replace with your own property
   testMessage: string;
 }
 
-/** A Custom Action which can be run during execution of a Client Side Application */
 export default class InternalUserMenuApplicationCustomizer
   extends BaseApplicationCustomizer<IInternalUserMenuApplicationCustomizerProperties> {
 
   @override
   public onInit(): Promise<void> {
-    Log.info(LOG_SOURCE, `Initialized ${strings.Title}`);
 
-    let message: string = this.properties.testMessage;
-    if (!message) {
-      message = '(No properties were provided.)';
-    }
+    return this.context.msGraphClientFactory
+      .getClient()
+      .then((client: MSGraphClient): Promise<HttpClientResponse> => {
 
-    Dialog.alert(`Hello from ${strings.Title}:\n\n${message}`);
+        return client.api(`me`).get();
+      })
+      .then((res: any) => {
 
-    return Promise.resolve();
+        if(res.userPrincipalName && res.userPrincipalName.indexOf("#EXT#") !== -1) {
+
+          // this is external user. Do not render the react component
+
+          return Promise.resolve();
+        }
+
+        const placeholder: PlaceholderContent = this.context.placeholderProvider.tryCreateContent(PlaceholderName.Top);
+        const element: React.ReactElement<IUserMenuProps> = React.createElement(UserMenu);
+
+        // render the react element in the top placeholder
+        ReactDom.render(element, placeholder.domElement);
+
+        return Promise.resolve();
+      })
+      .catch(error => {
+        return Promise.resolve();
+      });
   }
 }
